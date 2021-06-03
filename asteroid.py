@@ -17,14 +17,21 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-
+script_url = ''
 
 def start(update: telegram.Update, _: CallbackContext) -> None:
-    user = update.effective_user
-    update.message.reply_markdown_v2(
-        fr'Hi {user.mention_markdown_v2()}\!',
-        reply_markup=telegram.ForceReply(selective=True),
-    )
+    text = 'I am an intelligent bot for web-scrapping, finding/searching info and more! Join @AsteroidDiscuss for ' \
+           'news and updates!\n\nControl me by these commands:\n\n/echo - replies the text ' \
+           'back\n/answerx  - searches ' \
+           'for related website/info on the internet ' \
+           'with the given text\n/info ' \
+           '- find info about someone or ' \
+           'something\n/scrape - ' \
+           'helps you scrape the web by ' \
+           'commands\n/audio - converts the text ' \
+           'to audio file\n\n Have fun using me! 😄\n' \
+           'Ⴆყ 𝗖𝗼𝗹𝗼𝗿𝗖𝘂𝗯𝗲𝘀'
+    update.message.reply_text(text)
 
 
 def help_command(update: telegram.Update, _: CallbackContext) -> None:
@@ -54,22 +61,25 @@ def texttoaudio(update: telegram.Update, _: CallbackContext) -> None:
 
 
 def answer(update: telegram.Update, _: CallbackContext) -> None:
-    try:
-        question = update.message.text
-        result = chocolateo.web_scrape(question[9:])
+    if len(update.message.text) > 9:
+        question = update.message.text[9:]
+        update.message.bot.send_chat_action(update.message.chat.id, 'typing')
 
-        if result[1] != "":
-            if result[0] != "":
-                buttons = [[telegram.InlineKeyboardButton(text="More info", url=result[1])]]
-
-                keyboard = telegram.InlineKeyboardMarkup(buttons)
-                update.message.bot.sendMessage(update.message.chat_id, text=functions.enhanceText(result[0]),
-                                               reply_markup=keyboard)
+        if " ".join(functions.checkForURLs(question)) == question:
+            update.message.reply_text('I cannot search for just URL! Add some keywords or tags!')
         else:
-            text = result[0] + "\n\n" + result[1]
-            update.message.reply_text(text)
-    except:
-        pass
+            result = chocolateo.web_scrape(question)
+
+            if result[1] != "":
+                if result[0] != "":
+                    buttons = [[telegram.InlineKeyboardButton(text="More info", url=result[1])]]
+
+                    keyboard = telegram.InlineKeyboardMarkup(buttons)
+                    update.message.bot.sendMessage(update.message.chat_id, text=functions.enhanceText(result[0]),
+                                                   reply_markup=keyboard)
+            else:
+                text = result[0] + "\n\n" + result[1]
+                update.message.reply_text(text)
 
 
 def info(update: telegram.Update, _: CallbackContext) -> None:
@@ -107,6 +117,23 @@ def commandScrape(update: telegram.Update, _: CallbackContext) -> None:
     else:
         update.message.reply_text(result[0], parse_mode=parseMode)
 
+def short(update: telegram.Update, _: CallbackContext) -> None:
+    if script_url != '':
+        target_site = update.message.text[7:]
+
+        if not target_site.startswith('http'):
+            target_site = 'http://' + target_site
+
+        target_location = 'https://script.google.com/macros/s/' + script_url + '/exec?url=' + target_site
+
+        web_request = request.Request(target_location)
+        response = request.urlopen(web_request).read()
+        decodedResponse = response.decode(DECODING_FORMAT)
+
+        if decodedResponse[0:len('Awesome')] == 'Awesome':  # Check ff it's successful
+            update.message.reply_text(decodedResponse)
+        else:
+            update.message.reply_text('Error: \n' + decodedResponse)
 
 def main() -> None:
     """Start the bot."""
@@ -141,6 +168,9 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler("info", info))
     dispatcher.add_handler(CommandHandler("audio", texttoaudio))
     dispatcher.add_handler(CommandHandler("scrape", commandScrape))
+    dispatcher.add_handler(CommandHandler("short", short))
+    dispatcher.add_handler(CommandHandler("echo", echo))
+    
 
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, filterText))
 
