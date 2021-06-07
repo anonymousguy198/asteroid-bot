@@ -8,6 +8,7 @@ import better_profanity
 from configparser import ConfigParser
 import bingfo
 import chocolateo
+import exifextract
 import commandscrape
 import functions
 from texttoaudio import toAudio
@@ -59,27 +60,29 @@ def texttoaudio(update: telegram.Update, _: CallbackContext) -> None:
     except Exception:
         pass
 
+    
+def answerx(update: telegram.Update, _: CallbackContext) -> None:
+    update.message.reply_text('/answerx command is deprecated! Use /answer command!')
+    
+    
 
 def answer(update: telegram.Update, _: CallbackContext) -> None:
-    if len(update.message.text) > 9:
-        question = update.message.text[9:]
-        update.message.bot.send_chat_action(update.message.chat.id, 'typing')
+    try:
+        question = update.message.text
+        result = chocolateo.web_scrape(question[9:])
 
-        if " ".join(functions.checkForURLs(question)) == question:
-            update.message.reply_text('I cannot search for just URL! Add some keywords or tags!')
+        if result[1] != "":
+            if result[0] != "":
+                buttons = [[telegram.InlineKeyboardButton(text="More info", url=result[1])]]
+
+                keyboard = telegram.InlineKeyboardMarkup(buttons)
+                update.message.bot.sendMessage(update.message.chat_id, text=functions.enhanceText(result[0]),
+                                               reply_markup=keyboard)
         else:
-            result = chocolateo.web_scrape(question)
-
-            if result[1] != "":
-                if result[0] != "":
-                    buttons = [[telegram.InlineKeyboardButton(text="More info", url=result[1])]]
-
-                    keyboard = telegram.InlineKeyboardMarkup(buttons)
-                    update.message.bot.sendMessage(update.message.chat_id, text=functions.enhanceText(result[0]),
-                                                   reply_markup=keyboard)
-            else:
-                text = result[0] + "\n\n" + result[1]
-                update.message.reply_text(text)
+            text = result[0] + "\n\n" + result[1]
+            update.message.reply_text(text)
+    except:
+        pass
 
 
 def info(update: telegram.Update, _: CallbackContext) -> None:
@@ -105,6 +108,38 @@ def base64(update: telegram.Update, _: CallbackContext) -> None:
         update.message.reply_text(functions.encode(update.message.text[8:]))
     except:
         pass
+    
+def exif_data(update: telegram.Update, _: CallbackContext) -> None:
+    document = None
+    uncompressed_message = 'Reply to a message with an image sent uncompressed. Else the replied message do ' \
+                           'not have any image file.'
+
+    try:
+        document = update.message.reply_to_message.document
+    except:
+        update.message.reply_text(uncompressed_message)
+
+    supported_formats = ['jpg', 'jpeg', 'png']
+
+    if document is not None:
+        is_supported = False
+
+        for image_format in supported_formats:
+            if document.file_name.endswith('.' + image_format):
+                is_supported = True
+                break
+
+        if is_supported:
+            try:
+                text = exifextract.extractMetaFromURL(document.get_file().file_path)
+                update.message.reply_text(text)
+            except:
+                update.message.reply_text('There is no meta data found!')
+        else:
+            update.message.reply_text('The given file format is not supported. The supported formats are PNG, '
+                                      'JPG and JPEG')
+    else:
+        update.message.reply_text(uncompressed_message)
 
 
 def commandScrape(update: telegram.Update, _: CallbackContext) -> None:
@@ -162,15 +197,15 @@ def main() -> None:
     # on different commands - answer in Telegram
     dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(CommandHandler("help", help_command))
-    dispatcher.add_handler(CommandHandler("answerx", answer))
+    dispatcher.add_handler(CommandHandler("answerx", answerx))
+    dispatcher.add_handler(CommandHandler("answer", answer))
     dispatcher.add_handler(CommandHandler("delete", delete))
     dispatcher.add_handler(CommandHandler("base64", base64))
     dispatcher.add_handler(CommandHandler("info", info))
     dispatcher.add_handler(CommandHandler("audio", texttoaudio))
     dispatcher.add_handler(CommandHandler("scrape", commandScrape))
     dispatcher.add_handler(CommandHandler("short", short))
-    dispatcher.add_handler(CommandHandler("echo", echo))
-    
+    dispatcher.add_handler(CommandHandler("exif", exif_data))
 
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, filterText))
 
